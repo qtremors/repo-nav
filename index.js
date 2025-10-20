@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Constants & State ---
     const GITHUB_API_URL = 'https://api.github.com';
     const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
-    let allRepos = []; // Stores the full, unfiltered list
+    let allRepos = [];
     let currentUsername = '';
 
     // --- DOM Elements ---
@@ -12,7 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refresh-btn');
     const filterInput = document.getElementById('filter-input');
     const sortSelect = document.getElementById('sort-select');
-    const topicSelect = document.getElementById('topic-select'); // Renamed
+    const languageSelect = document.getElementById('language-select');
+    const topicSelect = document.getElementById('topic-select');
     const repoList = document.getElementById('repo-list');
     const loader = document.getElementById('loader');
     const errorMessage = document.getElementById('error-message');
@@ -43,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshBtn.addEventListener('click', () => handleFetchRepos(true));
     filterInput.addEventListener('input', renderRepos);
     sortSelect.addEventListener('change', renderRepos);
-    topicSelect.addEventListener('change', renderRepos); // Renamed
+    languageSelect.addEventListener('change', renderRepos);
+    topicSelect.addEventListener('change', renderRepos);
     
     // Modal Listeners
     modalCloseBtn.addEventListener('click', hideReadmeModal);
@@ -92,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 allRepos = cachedRepos;
                 renderProfile(cachedProfile);
                 renderProfileReadme(cachedProfileReadme);
-                populateTopicFilter(allRepos);
+                populateFilters(allRepos);
                 renderRepos();
                 showLoader(false);
                 return;
@@ -101,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             console.log('Fetching from API...');
+            // Fetch profile, repos, and profile README in parallel
             const [profile, repos, profileReadme] = await Promise.all([
                 fetchUserData(`${GITHUB_API_URL}/users/${currentUsername}`),
                 fetchAllPages(`${GITHUB_API_URL}/users/${currentUsername}/repos?per_page=100&sort=pushed`),
@@ -111,20 +114,19 @@ document.addEventListener('DOMContentLoaded', () => {
             renderProfile(profile);
             renderProfileReadme(profileReadme);
             
-            // Set cache for all three
             setCache(currentUsername, 'repos', allRepos);
             setCache(currentUsername, 'profile', profile);
             setCache(currentUsername, 'profileReadme', profileReadme);
 
-            populateTopicFilter(allRepos);
+            populateFilters(allRepos); // Updated function name
             renderRepos();
         } catch (error) {
             console.error('Error fetching data:', error);
             showError(error.message || 'Failed to fetch data.');
             allRepos = [];
             renderRepos();
-            profileSection.style.display = 'none';
-            profileReadmeContainer.style.display = 'none';
+            profileSection.style.display = 'none'; 
+            profileReadmeContainer.style.display = 'none'; 
         } finally {
             showLoader(false);
         }
@@ -147,7 +149,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     /**
      * Fetches the user's profile README (e.g., /repos/user/user/readme).
-     * Returns null if not found, allowing Promise.all to continue.
      */
     async function fetchProfileReadme(username) {
         try {
@@ -157,13 +158,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 if (response.status === 404) {
                     console.log('No profile README found.');
-                    return null;
+                    return null; 
                 }
                 throw new Error('Could not fetch profile README.');
             }
             return await response.json();
         } catch (error) {
-            console.warn(error.message);
+            console.warn(error.message); 
             return null;
         }
     }
@@ -204,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
      * Decodes Base64 (with emoji/UTF-8 support)
      */
     function decodeReadmeContent(base64Content) {
-        
         const binaryString = atob(base64Content);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -256,11 +256,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterText = filterInput.value.toLowerCase();
         let filteredRepos = allRepos.filter(repo => repo.name.toLowerCase().includes(filterText));
 
+        const selectedLang = languageSelect.value;
+        if (selectedLang !== 'all') {
+            filteredRepos = filteredRepos.filter(repo => repo.language === selectedLang);
+        }
+
         const selectedTopic = topicSelect.value;
         if (selectedTopic !== 'all') {
-            filteredRepos = filteredRepos.filter(repo => {
-                return repo.language === selectedTopic || (repo.topics && repo.topics.includes(selectedTopic));
-            });
+            filteredRepos = filteredRepos.filter(repo => repo.topics && repo.topics.includes(selectedTopic));
         }
 
         const sortBy = sortSelect.value;
@@ -320,26 +323,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Populates the topic filter dropdown with unique languages and topics from repos.
+     * Populates the language and topic filter dropdowns.
      */
-    function populateTopicFilter(repos) {
-        const techSet = new Set();
+    function populateFilters(repos) {
+        const langSet = new Set();
+        const topicSet = new Set();
+        
         repos.forEach(repo => {
             if (repo.language) {
-                techSet.add(repo.language);
+                langSet.add(repo.language);
             }
             if (repo.topics) {
-                repo.topics.forEach(topic => techSet.add(topic));
+                repo.topics.forEach(topic => topicSet.add(topic));
             }
         });
         
-        const allTech = [...techSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        
-        topicSelect.innerHTML = '<option value="all">All Tech</option>';
-        allTech.forEach(tech => {
+        // Sort and populate languages
+        const allLangs = [...langSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        languageSelect.innerHTML = '<option value="all">All Languages</option>';
+        allLangs.forEach(lang => {
             const option = document.createElement('option');
-            option.value = tech;
-            option.textContent = tech;
+            option.value = lang;
+            option.textContent = lang;
+            languageSelect.appendChild(option);
+        });
+
+        // Sort and populate topics
+        const allTopics = [...topicSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        topicSelect.innerHTML = '<option value="all">All Topics</option>';
+        allTopics.forEach(topic => {
+            const option = document.createElement('option');
+            option.value = topic;
+            option.textContent = topic;
             topicSelect.appendChild(option);
         });
     }
@@ -375,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
         readmeContent.innerHTML = '';
         modalLoader.style.display = 'flex';
         readmeModal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden'; 
     }
     
     function hideReadmeModal() {
@@ -396,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getCache(username, type) {
         const cached = localStorage.getItem(`gh_${type}_${username}`);
-        if (cached === null) return null;
+        if (cached === null) return null; 
         const parsed = JSON.parse(cached);
         if (parsed === null) return null;
         const { timestamp, data } = parsed;
