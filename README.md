@@ -2,6 +2,16 @@
 
 RepoNavigator is a sleek, single-page application designed to fetch, display, and navigate a GitHub user's profile and repositories. It provides a clean, high-performance interface for browsing repo details, filtering, sorting, and reading READMEs, all without leaving a single page.
 
+---
+
+## 🖼️ Screenshots
+
+| Profile Section | Repositories Section |
+|:---------:|:------------:|
+| ![Profile Section](assets/profile.png) | ![Repositories Section](assets/repos.png) |
+
+---
+
 ## ✨ Features
 
 -   👤 **Dynamic User Profile:** Fetches and displays the target user's profile card, including their avatar, name, bio, and key stats (followers, following, repo count, and total public commits). The user's name links directly to their GitHub profile.
@@ -33,6 +43,8 @@ RepoNavigator is a sleek, single-page application designed to fetch, display, an
     -   **Accessibility:** Tooltips are provided for all interactive icons and stats.
 -   🔑 **GitHub Token Support:** Includes an optional field for a GitHub Personal Access Token (PAT) to increase API rate limits for heavy use.
 
+---
+
 ## 💻 Tech Stack
 
 -   **Core:** Vanilla JavaScript (ES6+), HTML5, CSS3
@@ -40,9 +52,10 @@ RepoNavigator is a sleek, single-page application designed to fetch, display, an
 -   **Libraries:** `marked.js` (for client-side Markdown-to-HTML conversion)
 -   **Tooling:** None! This project is build-less and runs directly in the browser.
 
-## Changelog
+---
+---
 
-## 2025-10-21
+# Changelog - 2025-10-21
 
 ### ✨ Features
 
@@ -55,6 +68,8 @@ RepoNavigator is a sleek, single-page application designed to fetch, display, an
   * **Download Button:** Added a "Download ZIP" button to each card.
   * **Website Link:** Added a "Homepage" link icon to each card (if a homepage URL is provided in the repo data).
   * **Theme Changer:** Added a theme-switcher dropdown in the header to toggle between "Default Dark," "GitHub Dark," and "GitHub Contrast" themes.
+
+---
 
 ### 🎨 UI & UX Improvements
 
@@ -70,6 +85,8 @@ RepoNavigator is a sleek, single-page application designed to fetch, display, an
   * **Card Layout:**
       * Added the repo's "Creation Date" to the stats block.
       * Vertically centered the repo name with the link icons in the card header.
+
+---
 
 ### ♻️ Refactoring & Fixes
 
