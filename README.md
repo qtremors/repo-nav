@@ -1,6 +1,6 @@
 # 🧭 RepoNavigator
 
-RepoNavigator is a sleek, single-page application designed to fetch, display, and navigate a GitHub user's profile and repositories. It provides a clean, high-performance interface for browsing repo details, filtering, sorting, and reading READMEs, all without leaving a single page.
+RepoNavigator is a fast, single-page app that fetches and displays GitHub user profiles and repositories, letting you browse with advanced sorting, filter by tech or commit counts, view commit history, and read READMEs seamlessly in one place, complete with multiple themes and repo quick-actions.
 
 ---
 
@@ -55,7 +55,7 @@ RepoNavigator is a sleek, single-page application designed to fetch, display, an
 ---
 ---
 
-# Changelog - 2025-10-21
+# 📃 Changelog - 2025-10-21
 
 ### ✨ Features
 
