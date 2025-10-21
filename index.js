@@ -724,24 +724,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (selectedCheckboxes.length > 5) {
-            showToast('Starting multiple downloads... Please allow pop-ups.');
+        if (selectedCheckboxes.length > 1) {
+            showToast(`Downloading ${selectedCheckboxes.length} files... Please allow multiple downloads.`);
         } else {
-             showToast(`Starting ${selectedCheckboxes.length} download(s)...`);
+             showToast(`Starting 1 download...`);
         }
 
-        selectedCheckboxes.forEach((cb, index) => {
+        selectedCheckboxes.forEach((cb) => {
             const url = cb.dataset.zipUrl;
             
-            // Stagger downloads to make it slightly less aggressive for pop-up blockers
-            setTimeout(() => {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }, index * 300);
+            // Trigger all clicks synchronously.
+            // The browser will batch these and ask for permission.
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         });
         
         // Uncheck all after download

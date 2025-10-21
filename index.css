@@ -423,9 +423,9 @@ input[type=number] {
 }
 
 .download-list-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
     max-height: 50vh;
     overflow-y: auto;
     padding-right: 8px;
@@ -434,14 +434,15 @@ input[type=number] {
 
 .download-item {
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    flex-direction: row;
+    align-items: center;
     gap: 12px;
     padding: 12px;
     border-radius: var(--border-radius-sm);
     background-color: var(--md-sys-color-surface);
     border: 1px solid var(--md-sys-color-outline);
-    height: 100%;
+    flex-basis: 300px;
+    flex-grow: 1;
 }
 .download-item:hover {
      background-color: var(--md-sys-color-surface-variant);
@@ -449,7 +450,7 @@ input[type=number] {
 
 .download-item-info {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
     cursor: pointer;
     flex-grow: 1;
@@ -465,11 +466,10 @@ input[type=number] {
 
 .btn-download-single {
     flex-shrink: 0;
-    align-self: flex-end;
 }
 
 .modal-footer {
-    margin-top: auto;
+    margin-top: auto; 
     padding-top: 16px;
     border-top: 1px solid var(--md-sys-color-outline);
     display: flex;
