@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
     let allRepos = [];
     let currentUsername = '';
+    let currentSortDirection = 'desc'; // 'desc' or 'asc'
+    let toastTimer;
 
     // --- DOM Elements ---
     const usernameInput = document.getElementById('username-input');
@@ -16,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const topicSelect = document.getElementById('topic-select');
     const repoList = document.getElementById('repo-list');
     const loader = document.getElementById('loader');
+    const skeletonLoader = document.getElementById('skeleton-loader');
     const errorMessage = document.getElementById('error-message');
     
     // Profile Elements
@@ -27,17 +30,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileFollowers = document.getElementById('profile-followers');
     const profileFollowing = document.getElementById('profile-following');
     const profileRepos = document.getElementById('profile-repos');
+    const profileCommits = document.getElementById('profile-commits');
     const profileLink = document.getElementById('profile-link');
 
     // Profile README Elements
     const profileReadmeContainer = document.getElementById('profile-readme-container');
     const profileReadmeContent = document.getElementById('profile-readme-content');
 
-    // Modal Elements
+    // README Modal Elements
     const readmeModal = document.getElementById('readme-modal');
     const modalLoader = document.getElementById('modal-loader');
     const modalCloseBtn = document.getElementById('modal-close-btn');
     const readmeContent = document.getElementById('readme-content');
+
+    // Commits Modal Elements
+    const commitsModal = document.getElementById('commits-modal');
+    const commitsModalLoader = document.getElementById('commits-modal-loader');
+    const commitsModalCloseBtn = document.getElementById('commits-modal-close-btn');
+    const commitsModalTitle = document.getElementById('commits-modal-title');
+    const commitsListContent = document.getElementById('commits-list-content');
+
+    // New Controls
+    const themeSelect = document.getElementById('theme-select');
+    const sortDirectionBtn = document.getElementById('sort-direction-btn');
+    const commitFilterContainer = document.getElementById('commit-filter-container');
+    const commitFilterMin = document.getElementById('commit-filter-min');
+    const commitFilterMax = document.getElementById('commit-filter-max');
+    const toastNotification = document.getElementById('toast-notification');
+
+    // --- Initialization ---
+    applyTheme(localStorage.getItem('gh_theme') || 'default');
 
     // --- Event Listeners ---
     fetchBtn.addEventListener('click', () => handleFetchRepos(false));
@@ -46,30 +68,54 @@ document.addEventListener('DOMContentLoaded', () => {
     sortSelect.addEventListener('change', renderRepos);
     languageSelect.addEventListener('change', renderRepos);
     topicSelect.addEventListener('change', renderRepos);
+    commitFilterMin.addEventListener('input', renderRepos);
+    commitFilterMax.addEventListener('input', renderRepos);
     
-    // Modal Listeners
+    // New Listeners
+    themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+    sortDirectionBtn.addEventListener('click', toggleSortDirection);
+
+    // README Modal Listeners
     modalCloseBtn.addEventListener('click', hideReadmeModal);
     readmeModal.addEventListener('click', (e) => {
-        if (e.target === readmeModal) {
-            hideReadmeModal();
-        }
+        if (e.target === readmeModal) hideReadmeModal();
     });
     
+    // Commits Modal Listeners
+    commitsModalCloseBtn.addEventListener('click', hideCommitsModal);
+    commitsModal.addEventListener('click', (e) => {
+        if (e.target === commitsModal) hideCommitsModal();
+    });
+    
+    // Repo List Click Handler (Delegation)
     repoList.addEventListener('click', (e) => {
         const card = e.target.closest('.repo-card');
-        if (card) {
-            const owner = card.dataset.owner;
-            const repoName = card.dataset.repoName;
-            fetchAndShowReadme(owner, repoName);
+        if (!card) return;
+
+        const owner = card.dataset.owner;
+        const repoName = card.dataset.repoName;
+
+        // Check if "Copy Clone URL" button was clicked
+        if (e.target.closest('.btn-copy')) {
+            const cloneUrl = card.dataset.cloneUrl;
+            copyToClipboard(cloneUrl);
+            return;
         }
+
+        // Check if "View Commits" button was clicked
+        if (e.target.closest('.view-commits-btn')) {
+            fetchAndShowCommits(owner, repoName);
+            return;
+        }
+        
+        // Any other click on the card opens the README
+        fetchAndShowReadme(owner, repoName);
     });
 
     // --- Core Functions ---
 
     /**
      * Main function to fetch repositories and profile.
-     * Handles caching, API calls, and UI updates.
-     * @param {boolean} forceRefresh - If true, bypasses the cache.
      */
     async function handleFetchRepos(forceRefresh = false) {
         currentUsername = usernameInput.value.trim();
@@ -78,11 +124,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        showLoader(true);
+        showSkeletonLoader(true);
         showError('');
         repoList.innerHTML = '';
         profileSection.style.display = 'none';
         profileReadmeContainer.style.display = 'none';
+        profileCommits.innerHTML = '';
+        commitFilterContainer.style.display = 'none';
 
         if (!forceRefresh) {
             const cachedRepos = getCache(currentUsername, 'repos');
@@ -96,21 +144,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderProfileReadme(cachedProfileReadme);
                 populateFilters(allRepos);
                 renderRepos();
-                showLoader(false);
+                showSkeletonLoader(false);
+
+                if (allRepos.length > 0 && allRepos[0].commit_count === undefined) {
+                    fetchAndRenderCommitCounts(); 
+                } else {
+                    const totalCommits = allRepos.reduce((acc, repo) => acc + (repo.commit_count || 0), 0);
+                    profileCommits.innerHTML = `<span class="material-symbols-outlined">commit</span> ${totalCommits.toLocaleString()} commits (public)`;
+                    commitFilterContainer.style.display = 'flex';
+                }
                 return;
             }
         }
 
         try {
             console.log('Fetching from API...');
-            // Fetch profile, repos, and profile README in parallel
+            
+            const repoUrl = `${GITHUB_API_URL}/users/${currentUsername}/repos?per_page=100&sort=pushed`;
+
             const [profile, repos, profileReadme] = await Promise.all([
                 fetchUserData(`${GITHUB_API_URL}/users/${currentUsername}`),
-                fetchAllPages(`${GITHUB_API_URL}/users/${currentUsername}/repos?per_page=100&sort=pushed`),
+                fetchAllPages(repoUrl),
                 fetchProfileReadme(currentUsername)
             ]);
 
-            allRepos = repos;
+            allRepos = repos.map(repo => ({ ...repo, commit_count: undefined }));
             renderProfile(profile);
             renderProfileReadme(profileReadme);
             
@@ -118,8 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setCache(currentUsername, 'profile', profile);
             setCache(currentUsername, 'profileReadme', profileReadme);
 
-            populateFilters(allRepos); // Updated function name
+            populateFilters(allRepos);
             renderRepos();
+            fetchAndRenderCommitCounts();
+
         } catch (error) {
             console.error('Error fetching data:', error);
             showError(error.message || 'Failed to fetch data.');
@@ -127,10 +187,84 @@ document.addEventListener('DOMContentLoaded', () => {
             renderRepos();
             profileSection.style.display = 'none'; 
             profileReadmeContainer.style.display = 'none'; 
+            profileCommits.innerHTML = '';
         } finally {
-            showLoader(false);
+            showSkeletonLoader(false);
         }
     }
+    
+    /**
+     * Fetches commit counts for all repos in `allRepos` and re-renders.
+     */
+    async function fetchAndRenderCommitCounts() {
+        console.log('Fetching commit counts...');
+        const countPromises = allRepos.map(repo => 
+            fetchCommitCount(repo.owner.login, repo.name)
+        );
+        
+        // Using allSettled ensures that if one commit count fails (e.g., 403 rate limit),
+        // the others will still be processed.
+        const results = await Promise.allSettled(countPromises);
+        
+        let needRender = false;
+        let totalCommits = 0;
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled' && result.value !== null) {
+                allRepos[index].commit_count = result.value;
+                needRender = true;
+            } else {
+                // If fetching fails, default to 0 and log the error
+                allRepos[index].commit_count = 0;
+                if (result.status === 'rejected') {
+                     console.warn(`Could not fetch commit count for ${allRepos[index].name}:`, result.reason);
+                }
+            }
+            totalCommits += allRepos[index].commit_count;
+        });
+
+        if (needRender) {
+            console.log('Commit counts fetched, re-rendering...');
+            setCache(currentUsername, 'repos', allRepos);
+            commitFilterContainer.style.display = 'flex';
+            
+            profileCommits.innerHTML = `<span class="material-symbols-outlined">commit</span> ${totalCommits.toLocaleString()} commits (public)`;
+            
+            renderRepos();
+        }
+    }
+
+    /**
+     * Fetches the total commit count for a single repo.
+     */
+    async function fetchCommitCount(owner, repoName) {
+        const url = `${GITHUB_API_URL}/repos/${owner}/${repoName}/commits?per_page=1`;
+        try {
+            const response = await fetch(url, { headers: getAuthHeaders() });
+            if (!response.ok) {
+                 if (response.status === 409) return 0; // 409 Conflict = Empty repo
+                 // Throw an error to be caught by allSettled
+                 throw new Error(`API Error: ${response.status} for ${repoName}`);
+            }
+
+            const linkHeader = response.headers.get('Link');
+            if (linkHeader) {
+                const lastLink = linkHeader.split(',').find(s => s.includes('rel="last"'));
+                if (lastLink) {
+                    const match = lastLink.match(/<.*?[?&]page=(\d+).*?>/);
+                    if (match && match[1]) {
+                        return parseInt(match[1], 10);
+                    }
+                }
+            }
+            
+            const data = await response.json();
+            return data.length;
+        } catch (error) {
+            // Propagate error to be handled by Promise.allSettled
+            throw error;
+        }
+    }
+
 
     /**
      * Fetches user profile data (single page).
@@ -181,8 +315,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(nextUrl, { headers });
 
             if (!response.ok) {
-                if (response.status === 404) throw new Error('User not found.');
-                if (response.status === 403) throw new Error('API rate limit exceeded. Add a GitHub Token.');
+                if (response.status === 404) throw new Error('User data not found.');
+                if (response.status === 403) {
+                     const data = await response.json();
+                     throw new Error(data.message || 'API rate limit exceeded. Add a GitHub Token.');
+                }
                 throw new Error(`GitHub API error: ${response.statusText}`);
             }
             
@@ -205,12 +342,17 @@ document.addEventListener('DOMContentLoaded', () => {
      * Decodes Base64 (with emoji/UTF-8 support)
      */
     function decodeReadmeContent(base64Content) {
-        const binaryString = atob(base64Content);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+        try {
+            const binaryString = atob(base64Content);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new TextDecoder().decode(bytes);
+        } catch (e) {
+            console.error("Base64 decoding error:", e);
+            return "Error decoding content.";
         }
-        return new TextDecoder().decode(bytes);
     }
 
     /**
@@ -253,73 +395,147 @@ document.addEventListener('DOMContentLoaded', () => {
      * Filters, sorts, and renders the `allRepos` data into the DOM.
      */
     function renderRepos() {
+        // 1. Filter
         const filterText = filterInput.value.toLowerCase();
-        let filteredRepos = allRepos.filter(repo => repo.name.toLowerCase().includes(filterText));
-
         const selectedLang = languageSelect.value;
-        if (selectedLang !== 'all') {
-            filteredRepos = filteredRepos.filter(repo => repo.language === selectedLang);
-        }
-
         const selectedTopic = topicSelect.value;
-        if (selectedTopic !== 'all') {
-            filteredRepos = filteredRepos.filter(repo => repo.topics && repo.topics.includes(selectedTopic));
-        }
+        const minCommits = parseInt(commitFilterMin.value, 10) || 0;
+        const maxCommits = parseInt(commitFilterMax.value, 10) || Infinity;
 
-        const sortBy = sortSelect.value;
-        filteredRepos.sort((a, b) => {
-            if (sortBy === 'stars') return b.stargazers_count - a.stargazers_count;
-            if (sortBy === 'name') return a.name.localeCompare(b.name);
-            if (sortBy === 'updated') return new Date(b.updated_at) - new Date(a.updated_at);
-            return 0;
+        let filteredRepos = allRepos.filter(repo => {
+            const nameMatch = repo.name.toLowerCase().includes(filterText);
+            const langMatch = selectedLang === 'all' || repo.language === selectedLang;
+            const topicMatch = selectedTopic === 'all' || (repo.topics && repo.topics.includes(selectedTopic));
+            
+            const commitCount = repo.commit_count;
+            // Show repos even if commit count is still loading (undefined)
+            const commitMatch = commitCount === undefined || (commitCount >= minCommits && commitCount <= maxCommits);
+
+            return nameMatch && langMatch && topicMatch && commitMatch;
         });
 
+        // 2. Sort
+        const sortBy = sortSelect.value;
+        filteredRepos.sort((a, b) => {
+            let valA, valB;
+            switch (sortBy) {
+                case 'stars':
+                    valA = a.stargazers_count;
+                    valB = b.stargazers_count;
+                    break;
+                case 'name':
+                    valA = a.name.toLowerCase();
+                    valB = b.name.toLowerCase();
+                    return currentSortDirection === 'asc' 
+                        ? valA.localeCompare(valB) 
+                        : valB.localeCompare(valA);
+                case 'updated':
+                    valA = new Date(a.updated_at);
+                    valB = new Date(b.updated_at);
+                    break;
+                case 'created':
+                    valA = new Date(a.created_at);
+                    valB = new Date(b.created_at);
+                    break;
+                case 'commits':
+                    valA = a.commit_count ?? 0;
+                    valB = b.commit_count ?? 0;
+                    break;
+                default:
+                    return 0;
+            }
+            return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+        });
+
+        // 3. Render
         repoList.innerHTML = '';
+        
         if (filteredRepos.length === 0 && allRepos.length > 0) {
              repoList.innerHTML = '<p class="error-message">No repositories match your criteria.</p>';
              return;
         }
+
+        const fragment = document.createDocumentFragment();
 
         filteredRepos.forEach(repo => {
             const card = document.createElement('div');
             card.className = 'repo-card';
             card.dataset.owner = repo.owner.login;
             card.dataset.repoName = repo.name;
+            card.dataset.cloneUrl = repo.clone_url;
             
             const topicsHTML = repo.topics.map(topic => `<span class="topic-tag">${topic}</span>`).join('');
+            
+            const commitCountHTML = repo.commit_count === undefined
+                ? `<div class="loader-small"></div>`
+                : repo.commit_count.toLocaleString();
+            
+            const homepageLink = repo.homepage
+                ? `<a href="${repo.homepage}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="btn-icon" aria-label="Visit Homepage" title="Visit Homepage">
+                     <span class="material-symbols-outlined">language</span>
+                   </a>`
+                : '';
+            
+            const downloadLink = `<a href="${repo.html_url}/archive/refs/heads/${repo.default_branch}.zip" onclick="event.stopPropagation()" class="btn-icon" aria-label="Download ZIP" title="Download ZIP">
+                                    <span class="material-symbols-outlined">download</span>
+                                </a>`;
 
             card.innerHTML = `
                 <div class="repo-card-header">
                     <h3>
-                        <a href="${repo.html_url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">
+                        <a href="${repo.html_url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="View on GitHub">
                             ${repo.name}
                         </a>
                     </h3>
+                    <div class="repo-card-links">
+                        ${homepageLink}
+                        ${downloadLink}
+                    </div>
                 </div>
                 <p class="description">${repo.description || 'No description provided.'}</p>
                 ${repo.topics.length > 0 ? `<div class="repo-topics">${topicsHTML}</div>` : ''}
                 <div class="repo-stats">
                     ${repo.language ? `
-                    <span class="stat-item">
+                    <span class="stat-item" title="${repo.language}">
                         <span class="language-dot" style="background-color: ${getLangColor(repo.language)};"></span>
                         ${repo.language}
                     </span>` : ''}
-                    <span class="stat-item">
+                    <span class="stat-item" title="Stars">
                         <span class="material-symbols-outlined">star</span>
                         ${repo.stargazers_count}
                     </span>
-                    <span class="stat-item">
+                    <span class="stat-item" title="Forks">
                         <span class="material-symbols-outlined">share</span>
                         ${repo.forks_count}
                     </span>
-                    <span class="stat-item">
+                    <span class="stat-item commit-count" title="Commits">
+                        <span class="material-symbols-outlined">commit</span>
+                        ${commitCountHTML}
+                    </span>
+                    <span class="stat-item" title="Created">
+                        <span class="material-symbols-outlined">calendar_today</span>
+                        ${new Date(repo.created_at).toLocaleDateString()}
+                    </span>
+                    <span class="stat-item" title="Last Updated">
                         <span class="material-symbols-outlined">update</span>
                         ${new Date(repo.updated_at).toLocaleDateString()}
                     </span>
                 </div>
+                <div class="repo-card-actions">
+                    <button class="btn btn-outlined view-commits-btn" title="View commit history">
+                            <span class="material-symbols-outlined">history</span>
+                            <span>View Commits</span>
+                    </button>
+                    <button class="btn btn-outlined btn-copy" aria-label="Copy Clone URL" title="Copy Clone URL">
+                        <span class="material-symbols-outlined">content_copy</span>
+                    </button>
+                </div>
             `;
-            repoList.appendChild(card);
+            
+            fragment.appendChild(card);
         });
+        
+        repoList.appendChild(fragment);
     }
 
     /**
@@ -384,6 +600,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Fetches and displays the commit history for a given repository in a modal.
+     */
+    async function fetchAndShowCommits(owner, repoName) {
+        showCommitsModal(repoName);
+        try {
+            const commits = await fetchAllPages(`${GITHUB_API_URL}/repos/${owner}/${repoName}/commits?per_page=30`);
+            
+            if (commits.length === 0) {
+                commitsListContent.innerHTML = `<p class="error-message">No commits found for this repository.</p>`;
+                return;
+            }
+
+            commitsListContent.innerHTML = commits.map(commitData => {
+                const author = commitData.author;
+                const commit = commitData.commit;
+                return `
+                    <div class="commit-item">
+                        <img src="${author ? author.avatar_url : 'octocat.svg'}" alt="${author ? author.login : 'unknown'}" class="commit-avatar">
+                        <div class="commit-details">
+                            <p class="commit-message">${commit.message.split('\n')[0]}</p>
+                            <p class="commit-author">
+                                <span>${commit.author.name}</span>
+                                committed on ${new Date(commit.author.date).toLocaleDateString()}
+                            </p>
+                        </div>
+                        <a href="${commitData.html_url}" target="_blank" rel="noopener noreferrer" class="commit-sha">
+                            ${commitData.sha.substring(0, 7)}
+                        </a>
+                    </div>
+                `;
+            }).join('');
+
+        } catch (error) {
+            commitsListContent.innerHTML = `<p class="error-message">${error.message}</p>`;
+        } finally {
+            commitsModalLoader.style.display = 'none';
+        }
+    }
+
     // --- Modal & Utility Functions ---
 
     function showReadmeModal() {
@@ -397,38 +653,120 @@ document.addEventListener('DOMContentLoaded', () => {
         readmeModal.style.display = 'none';
         document.body.style.overflow = '';
     }
+
+    function showCommitsModal(repoName) {
+        commitsListContent.innerHTML = '';
+        commitsModalTitle.textContent = `Commit History: ${repoName}`;
+        commitsModalLoader.style.display = 'flex';
+        commitsModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; 
+    }
     
+    function hideCommitsModal() {
+        commitsModal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
     function getAuthHeaders() {
         const token = tokenInput.value.trim();
-        const headers = { 'Accept': 'application/vnd.github.v3+json' };
-        if (token) headers['Authorization'] = `token ${token}`;
+        const headers = { 
+            'Accept': 'application/vnd.github.v3+json',
+            'X-GitHub-Api-Version': '2022-11-28'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }
 
     function setCache(username, type, data) {
-        localStorage.setItem(`gh_${type}_${username}`, JSON.stringify({ timestamp: Date.now(), data }));
+        try {
+            localStorage.setItem(`gh_${type}_${username}`, JSON.stringify({ timestamp: Date.now(), data }));
+        } catch (e) {
+            console.warn("Failed to set cache:", e);
+        }
     }
 
     function getCache(username, type) {
         const cached = localStorage.getItem(`gh_${type}_${username}`);
         if (cached === null) return null; 
-        const parsed = JSON.parse(cached);
-        if (parsed === null) return null;
-        const { timestamp, data } = parsed;
-        if (Date.now() - timestamp > CACHE_DURATION_MS) {
-            localStorage.removeItem(`gh_${type}_${username}`);
+        try {
+            const parsed = JSON.parse(cached);
+            if (parsed === null) return null;
+            const { timestamp, data } = parsed;
+            if (Date.now() - timestamp > CACHE_DURATION_MS) {
+                localStorage.removeItem(`gh_${type}_${username}`);
+                return null;
+            }
+            return data;
+        } catch (e) {
+            console.warn("Failed to parse cache:", e);
             return null;
         }
-        return data;
     }
 
-    function showLoader(show) {
-        loader.style.display = show ? 'flex' : 'none';
+    function showSkeletonLoader(show) {
+        skeletonLoader.style.display = show ? 'grid' : 'none';
+        if (show) {
+            repoList.style.display = 'none';
+        } else {
+            repoList.style.display = 'grid';
+        }
     }
 
     function showError(message) {
         errorMessage.textContent = message;
     }
+    
+
+    /**
+     * Copies text to the clipboard and shows a toast.
+     */
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Clone URL copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            showToast('Failed to copy URL.');
+        });
+    }
+
+    /**
+     * Shows a toast notification.
+     */
+    function showToast(message) {
+        // Clear existing timer if any
+        if (toastTimer) {
+            clearTimeout(toastTimer);
+        }
+        
+        toastNotification.textContent = message;
+        toastNotification.classList.add('show');
+        
+        // Set new timer to hide
+        toastTimer = setTimeout(() => {
+            toastNotification.classList.remove('show');
+        }, 3000);
+    }
+    
+    function applyTheme(themeName) {
+        document.body.className = `theme-${themeName}`;
+        themeSelect.value = themeName;
+        localStorage.setItem('gh_theme', themeName);
+    }
+    
+    function toggleSortDirection() {
+        currentSortDirection = currentSortDirection === 'desc' ? 'asc' : 'desc';
+        sortDirectionBtn.classList.toggle('asc', currentSortDirection === 'asc');
+        sortDirectionBtn.classList.toggle('desc', currentSortDirection === 'desc');
+        sortDirectionBtn.querySelector('.material-symbols-outlined').textContent = 
+            currentSortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward';
+        
+        renderRepos();
+    }
+    
+    // Init sort direction button
+    sortDirectionBtn.classList.add(currentSortDirection);
+    sortDirectionBtn.querySelector('.material-symbols-outlined').textContent = 'arrow_downward';
+
 
     function getLangColor(lang) {
         const colors = {
