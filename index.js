@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const GITHUB_API_URL = 'https://api.github.com';
     const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
     let allRepos = [];
+    let currentFilteredRepos = [];
     let currentUsername = '';
     let currentSortDirection = 'desc'; // 'desc' or 'asc'
     let toastTimer;
@@ -50,6 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const commitsModalTitle = document.getElementById('commits-modal-title');
     const commitsListContent = document.getElementById('commits-list-content');
 
+    // Download Modal Elements <-- ADDED
+    const downloadReposBtn = document.getElementById('download-repos-btn');
+    const downloadModal = document.getElementById('download-modal');
+    const downloadModalCloseBtn = document.getElementById('download-modal-close-btn');
+    const downloadModalTitle = document.getElementById('download-modal-title');
+    const downloadListContent = document.getElementById('download-list-content');
+    const downloadSelectAll = document.getElementById('download-select-all');
+    const downloadSelectedBtn = document.getElementById('download-selected-btn');
+
     // New Controls
     const themeSelect = document.getElementById('theme-select');
     const sortDirectionBtn = document.getElementById('sort-direction-btn');
@@ -87,6 +97,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === commitsModal) hideCommitsModal();
     });
     
+    // Download Modal Listeners
+    downloadReposBtn.addEventListener('click', showDownloadModal);
+    downloadModalCloseBtn.addEventListener('click', hideDownloadModal);
+    downloadModal.addEventListener('click', (e) => {
+        if (e.target === downloadModal) hideDownloadModal();
+    });
+    downloadSelectAll.addEventListener('change', handleSelectAll);
+    downloadSelectedBtn.addEventListener('click', handleDownloadSelected);
+    downloadListContent.addEventListener('change', (e) => {
+        // Handle unchecking "Select All" if an individual box is unchecked
+        if (e.target.classList.contains('download-checkbox')) {
+            if (!e.target.checked) {
+                downloadSelectAll.checked = false;
+            } else {
+                // Check if all are now checked
+                const allCheckboxes = downloadListContent.querySelectorAll('.download-checkbox');
+                const allChecked = [...allCheckboxes].every(cb => cb.checked);
+                downloadSelectAll.checked = allChecked;
+            }
+        }
+    });
+
     // Repo List Click Handler (Delegation)
     repoList.addEventListener('click', (e) => {
         const card = e.target.closest('.repo-card');
@@ -131,6 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
         profileReadmeContainer.style.display = 'none';
         profileCommits.innerHTML = '';
         commitFilterContainer.style.display = 'none';
+        
+        currentFilteredRepos = [];
 
         if (!forceRefresh) {
             const cachedRepos = getCache(currentUsername, 'repos');
@@ -447,6 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return currentSortDirection === 'asc' ? valA - valB : valB - valA;
         });
 
+        currentFilteredRepos = filteredRepos;
+
         // 3. Render
         repoList.innerHTML = '';
         
@@ -638,6 +674,79 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             commitsModalLoader.style.display = 'none';
         }
+    }
+
+    // --- Download modal functions ---
+
+    function showDownloadModal() {
+        downloadModalTitle.textContent = `Download Repos (${currentFilteredRepos.length} filtered)`;
+        
+        if (currentFilteredRepos.length === 0) {
+            downloadListContent.innerHTML = '<p class="error-message" style="text-align: left; padding: 0;">No repos to download. (Matches current filters)</p>';
+            downloadSelectAll.disabled = true;
+            downloadSelectedBtn.disabled = true;
+        } else {
+            downloadListContent.innerHTML = currentFilteredRepos.map(repo => `
+                <div class="download-item">
+                    <label class="download-item-info">
+                        <input type="checkbox" class="download-checkbox" data-zip-url="${repo.html_url}/archive/refs/heads/${repo.default_branch}.zip">
+                        <span>${repo.name}</span>
+                    </label>
+                    <a href="${repo.html_url}/archive/refs/heads/${repo.default_branch}.zip" class="btn btn-icon btn-download-single" title="Download ${repo.name}.zip" onclick="event.stopPropagation()">
+                        <span class="material-symbols-outlined">download</span>
+                    </a>
+                </div>
+            `).join('');
+            downloadSelectAll.disabled = false;
+            downloadSelectedBtn.disabled = false;
+        }
+        
+        downloadSelectAll.checked = false;
+        downloadModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function hideDownloadModal() {
+        downloadModal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    function handleSelectAll() {
+        const checkboxes = downloadListContent.querySelectorAll('.download-checkbox');
+        checkboxes.forEach(cb => { cb.checked = downloadSelectAll.checked; });
+    }
+
+    function handleDownloadSelected() {
+        const selectedCheckboxes = downloadListContent.querySelectorAll('.download-checkbox:checked');
+        
+        if (selectedCheckboxes.length === 0) {
+            showToast('No repos selected.');
+            return;
+        }
+
+        if (selectedCheckboxes.length > 5) {
+            showToast('Starting multiple downloads... Please allow pop-ups.');
+        } else {
+             showToast(`Starting ${selectedCheckboxes.length} download(s)...`);
+        }
+
+        selectedCheckboxes.forEach((cb, index) => {
+            const url = cb.dataset.zipUrl;
+            
+            // Stagger downloads to make it slightly less aggressive for pop-up blockers
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }, index * 300);
+        });
+        
+        // Uncheck all after download
+        selectedCheckboxes.forEach(cb => { cb.checked = false; });
+        downloadSelectAll.checked = false;
     }
 
     // --- Modal & Utility Functions ---
