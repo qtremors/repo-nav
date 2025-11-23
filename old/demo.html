@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Archiver & Explorer (Final Demo)</title>
+    
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+
+    <style>
+        /* --- THEME VARIABLES (Dark Only) --- */
+        :root {
+            --bg-color: #0d1117;
+            --surface-color: #161b22;
+            --surface-border: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-color: #2f81f7;
+            --accent-hover: #58a6ff;
+            --success-color: #238636;
+            --danger-color: #da3633;
+            --btn-bg: #21262d;
+            --btn-border: #30363d;
+            --radius: 12px;
+            --header-height: 72px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Roboto', sans-serif; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- HEADER --- */
+        header {
+            background-color: var(--surface-color);
+            border-bottom: 1px solid var(--surface-border);
+            height: var(--header-height);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            flex-shrink: 0;
+            z-index: 50;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .logo span { color: var(--accent-color); font-size: 28px; }
+
+        /* --- UNIFIED SEARCH --- */
+        .search-container {
+            flex-grow: 1;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--bg-color);
+            border: 1px solid var(--surface-border);
+            color: var(--text-primary);
+            padding: 12px 16px 12px 44px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .search-input:focus { 
+            border-color: var(--accent-color); 
+            box-shadow: 0 0 0 2px rgba(47, 129, 247, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        /* Search Spinner */
+        .search-spinner {
+            position: absolute;
+            right: 14px;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--surface-border);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+        .search-spinner.active { display: block; }
+
+        /* Suggestions Dropdown */
+        .suggestions-dropdown {
+            position: absolute;
+            top: 110%;
+            left: 0;
+            right: 0;
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+            z-index: 100;
+            display: none;
+            overflow: hidden;
+        }
+        .suggestion-header {
+            padding: 10px 16px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--surface-border);
+        }
+        .suggestion-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.15s;
+            border-bottom: 1px solid var(--surface-border);
+        }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover { background: var(--btn-bg); }
+        .suggestion-item img { width: 24px; height: 24px; border-radius: 50%; }
+        .suggestion-item b { color: var(--text-primary); }
+        .suggestion-item span { color: var(--text-secondary); font-size: 14px; }
+
+        /* --- MAIN CONTENT --- */
+        main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .view-section {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            padding: 24px;
+            overflow-y: auto;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .view-section.active {
+            display: block;
+            opacity: 1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding-bottom: 40px;
+        }
+
+        /* --- TOOLBARS & FILTERS --- */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+            align-items: center;
+        }
+
+        .toolbar-title {
+            font-size: 24px;
+            font-weight: 500;
+            margin-right: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Inputs & Selects */
+        .input-group {
+            display: flex;
+            align-items: center;
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 0 12px;
+            height: 40px;
+        }
+        .input-group input, .input-group select {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            height: 100%;
+        }
+        .input-group span { color: var(--text-secondary); margin-right: 8px; font-size: 18px; }
+
+        /* Buttons */
+        .btn {
+            height: 40px;
+            padding: 0 20px;
+            border-radius: 8px;
+            border: 1px solid var(--btn-border);
+            background: var(--btn-bg);
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn:hover { background: var(--surface-border); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        
+        .btn-primary { background: var(--accent-color); color: #fff; border: none; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        
+        .btn-icon { width: 40px; padding: 0; border-radius: 50%; color: var(--text-secondary); background: transparent; border: none; }
+        .btn-icon:hover { background: var(--btn-bg); color: var(--text-primary); }
+
+        /* --- REPO GRID & CARDS --- */
+        .repo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+            transition: transform 0.2s, border-color 0.2s;
+            height: 100%;
+        }
+        .card:hover { transform: translateY(-3px); border-color: var(--text-secondary); }
+
+        .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .card-title { 
+            font-size: 16px; font-weight: 600; color: var(--accent-color); text-decoration: none; 
+            word-break: break-all; line-height: 1.4;
+        }
+        .card-title:hover { text-decoration: underline; }
+        
+        .card-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; flex: 1; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+        .card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--surface-border);
+            padding-top: 16px;
+            margin-top: auto;
+        }
+        .meta-item { display: flex; align-items: center; gap: 6px; }
+        .lang-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* Status & Progress */
+        .update-badge {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 100px;
+            background: rgba(35, 134, 54, 0.2);
+            color: var(--success-color);
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 4px;
+        }
+        .update-badge.active { display: inline-flex; }
+
+        .progress-container {
+            height: 4px;
+            background: var(--surface-border);
+            border-radius: 2px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar { height: 100%; background: var(--accent-color); width: 0%; transition: width 0.3s; }
+
+        /* --- EXPLORE PROFILE --- */
+        .profile-header {
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius);
+            padding: 32px;
+            display: flex;
+            align-items: flex-start;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+        .profile-avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid var(--surface-border); }
+        .profile-content h1 { font-size: 28px; margin-bottom: 4px; }
+        .profile-login { font-size: 18px; color: var(--text-secondary); margin-bottom: 12px; }
+        .profile-bio { max-width: 600px; line-height: 1.5; margin-bottom: 20px; }
+        .profile-stats { display: flex; gap: 24px; }
+        .stat { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 14px; }
+        .stat b { color: var(--text-primary); font-size: 16px; }
+
+        /* --- MODALS --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .modal-overlay.open { display: flex; opacity: 1; }
+
+        .modal-card {
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            border-radius: 16px;
+            width: 800px;
+            max-width: 90%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            transform: translateY(20px);
+            transition: transform 0.2s;
+        }
+        .modal-overlay.open .modal-card { transform: translateY(0); }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--surface-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-tabs {
+            display: flex;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--surface-border);
+            gap: 24px;
+        }
+        .modal-tab {
+            padding: 16px 0;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .modal-tab:hover { color: var(--text-primary); }
+        .modal-tab.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+
+        .modal-body { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg-color); }
+        .modal-footer { padding: 20px 24px; border-top: 1px solid var(--surface-border); display: flex; justify-content: flex-end; gap: 12px; background: var(--surface-color); border-radius: 0 0 16px 16px; }
+
+        /* Settings Modal Specific */
+        .settings-modal .modal-card { width: 500px; height: auto; }
+        .settings-input { width: 100%; background: var(--bg-color); border: 1px solid var(--surface-border); color: var(--text-primary); padding: 12px; border-radius: 8px; font-family: monospace; margin-top: 8px; }
+        
+        /* Fake Readme Content */
+        .readme-content h1 { border-bottom: 1px solid var(--surface-border); padding-bottom: 0.3em; margin-bottom: 1em; }
+        .readme-content p { margin-bottom: 1em; line-height: 1.6; }
+        .readme-content pre { background: var(--surface-color); padding: 16px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--surface-border); }
+        .readme-content code { font-family: monospace; color: var(--accent-color); }
+
+        /* Commit List */
+        .commit-item { display: flex; gap: 16px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--surface-border); }
+        .commit-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .commit-msg { font-weight: 500; margin-bottom: 4px; }
+        .commit-meta { font-size: 12px; color: var(--text-secondary); }
+
+        /* --- TOAST --- */
+        .toast {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            padding: 12px 24px;
+            border-radius: 100px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 2000;
+        }
+        .toast.active { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast span { font-size: 20px; }
+        .toast.success span { color: var(--success-color); }
+        .toast.error span { color: var(--danger-color); }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state span { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+
+        /* Spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+
+    <!-- === HEADER === -->
+    <header>
+        <div class="logo" onclick="switchView('dashboard')">
+            <span class="material-symbols-rounded">archive</span>
+            GitHub Archiver
+        </div>
+
+        <!-- UNIFIED SEARCH -->
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <span class="material-symbols-rounded search-icon">search</span>
+                <input type="text" class="search-input" id="unified-search" placeholder="Search Users or Repositories (e.g. 'qtremors', 'auto-archiver')" autocomplete="off">
+                <div class="search-spinner" id="search-spinner"></div>
+            </div>
+            
+            <!-- Suggestions Dropdown -->
+            <div class="suggestions-dropdown" id="search-suggestions">
+                <!-- JS Injected Content -->
+            </div>
+        </div>
+
+        <button class="btn btn-icon" onclick="openSettings()" title="Settings">
+            <span class="material-symbols-rounded">settings</span>
+        </button>
+    </header>
+
+    <main>
+        <!-- =========================================== -->
+        <!-- VIEW 1: DASHBOARD (The Archiver)            -->
+        <!-- =========================================== -->
+        <section id="dashboard-view" class="view-section active">
+            <div class="container">
+                
+                <div class="toolbar">
+                    <div class="toolbar-title">
+                        <span class="material-symbols-rounded">dashboard</span> Dashboard
+                    </div>
+                    
+                    <!-- Filters -->
+                    <div class="input-group">
+                        <span class="material-symbols-rounded">filter_alt</span>
+                        <input type="text" placeholder="Filter by name..." id="dash-filter" oninput="renderDashboard()">
+                    </div>
+                    
+                    <div class="input-group">
+                        <span class="material-symbols-rounded">sort</span>
+                        <select id="dash-sort" onchange="renderDashboard()">
+                            <option value="name">Name</option>
+                            <option value="stars">Stars</option>
+                            <option value="updated">Last Updated</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary" id="check-updates-btn" onclick="checkUpdates()">
+                        <span class="material-symbols-rounded">sync</span>
+                        Check Updates
+                    </button>
+                </div>
+
+                <div id="dashboard-grid" class="repo-grid">
+                    <!-- Grid Content -->
+                </div>
+
+            </div>
+        </section>
+
+        <!-- =========================================== -->
+        <!-- VIEW 2: EXPLORE (The Navigator)             -->
+        <!-- =========================================== -->
+        <section id="explore-view" class="view-section">
+            <div class="container">
+                
+                <!-- Profile Card -->
+                <div class="profile-header">
+                    <img id="exp-avatar" src="" class="profile-avatar">
+                    <div class="profile-content">
+                        <h1 id="exp-name">User Name</h1>
+                        <p id="exp-login" class="profile-login">@username</p>
+                        <p id="exp-bio" class="profile-bio">Bio description goes here.</p>
+                        <div class="profile-stats">
+                            <div class="stat"><span class="material-symbols-rounded">group</span> <b id="exp-followers">0</b> Followers</div>
+                            <div class="stat"><span class="material-symbols-rounded">book</span> <b id="exp-repos-count">0</b> Repos</div>
+                        </div>
+                    </div>
+                    <button class="btn" onclick="switchView('dashboard')" style="margin-left: auto; align-self: flex-start;">
+                        <span class="material-symbols-rounded">close</span> Close
+                    </button>
+                </div>
+
+                <!-- Filters Reuse styles -->
+                <div class="toolbar">
+                    <div class="toolbar-title">Repositories</div>
+                    <div class="input-group">
+                        <span class="material-symbols-rounded">filter_alt</span>
+                        <input type="text" placeholder="Filter repos..." id="exp-filter" oninput="renderExploreGrid()">
+                    </div>
+                </div>
+
+                <div id="explore-grid" class="repo-grid">
+                    <!-- Grid Content -->
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- === MODALS === -->
+
+    <!-- 1. REPO DETAIL MODAL -->
+    <div class="modal-overlay" id="repo-modal" onclick="closeModal('repo-modal')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="rm-title">Repo Name</h2>
+                <button class="btn btn-icon" onclick="closeModal('repo-modal')"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            
+            <div class="modal-tabs">
+                <div class="modal-tab active" onclick="switchTab('readme')">README.md</div>
+                <div class="modal-tab" onclick="switchTab('commits')">Commits</div>
+            </div>
+
+            <div class="modal-body" id="rm-body">
+                <!-- Content Injected Here -->
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn" onclick="downloadZip()">
+                    <span class="material-symbols-rounded">download</span> Download ZIP
+                </button>
+                <button class="btn btn-primary" id="rm-action-btn" onclick="addCurrentRepo()">
+                    <span class="material-symbols-rounded">archive</span> Add to Archiver
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. SETTINGS MODAL -->
+    <div class="modal-overlay settings-modal" id="settings-modal" onclick="closeModal('settings-modal')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="btn btn-icon" onclick="closeModal('settings-modal')"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <div class="modal-body" style="background: var(--surface-color);">
+                <label style="font-weight: 500; font-size: 14px;">GitHub Personal Access Token</label>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Required for higher API rate limits.</p>
+                <input type="password" id="settings-token" class="settings-input" placeholder="ghp_xxxxxxxxxxxx">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveSettings()">Save Token</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- === TOAST === -->
+    <div class="toast" id="toast">
+        <span class="material-symbols-rounded">check_circle</span>
+        <p id="toast-msg">Message</p>
+    </div>
+
+    <!-- === LOGIC === -->
+    <script>
+        /* --- MOCK DATA --- */
+        const mockUsers = [
+            { login: 'qtremors', name: 'Tremors', avatar: 'https://github.com/qtremors.png', bio: 'Junior Python Dev | CSE Grad', followers: 120, repos: 45 },
+            { login: 'google', name: 'Google', avatar: 'https://github.com/google.png', bio: 'Building for everyone.', followers: 30000, repos: 2500 }
+        ];
+
+        const mockRepos = [
+            { id: 101, owner: 'qtremors', name: 'repo-navigator', lang: 'JavaScript', stars: 45, desc: 'A fast github client browser.', updated: '2023-10-01' },
+            { id: 102, owner: 'qtremors', name: 'python-scripts', lang: 'Python', stars: 12, desc: 'Automation scripts collection.', updated: '2023-09-15' },
+            { id: 103, owner: 'google', name: 'guava', lang: 'Java', stars: 48000, desc: 'Google core libraries for Java.', updated: '2023-10-20' },
+            { id: 104, owner: 'dev', name: 'auto-archiver', lang: 'Go', stars: 150, desc: 'Tool to auto archive files.', updated: '2023-10-05' }
+        ];
+
+        /* --- STATE --- */
+        let myArchivedRepos = []; // The Dashboard List
+        let currentExploreRepos = []; // The Explore List
+        let currentModalRepo = null; // Repo currently in modal
+        let searchTimer;
+
+        /* --- INIT --- */
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load initial fake dashboard data
+            myArchivedRepos = [
+                { ...mockRepos[0], hasUpdate: false, isAdded: true },
+                { ...mockRepos[2], hasUpdate: true, isAdded: true }
+            ];
+            renderDashboard();
+        });
+
+        /* --- NAVIGATION --- */
+        function switchView(view) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById(`${view}-view`).classList.add('active');
+        }
+
+        /* --- SEARCH LOGIC --- */
+        const searchInput = document.getElementById('unified-search');
+        const suggestions = document.getElementById('search-suggestions');
+        const spinner = document.getElementById('search-spinner');
+
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            clearTimeout(searchTimer);
+            suggestions.style.display = 'none';
+            
+            if (val.length < 2) return;
+
+            spinner.classList.add('active');
+
+            // Debounce
+            searchTimer = setTimeout(() => {
+                spinner.classList.remove('active');
+                
+                // Mock Filter
+                const userMatches = mockUsers.filter(u => u.login.toLowerCase().includes(val));
+                const repoMatches = mockRepos.filter(r => r.name.toLowerCase().includes(val));
+
+                if (userMatches.length === 0 && repoMatches.length === 0) return;
+
+                let html = '';
+                
+                if (userMatches.length) {
+                    html += `<div class="suggestion-header">Users</div>`;
+                    userMatches.forEach(u => {
+                        html += `
+                            <div class="suggestion-item" onclick="openExplore('${u.login}')">
+                                <img src="${u.avatar}"> 
+                                <div><b>${u.login}</b><br><span>${u.name}</span></div>
+                            </div>`;
+                    });
+                }
+
+                if (repoMatches.length) {
+                    html += `<div class="suggestion-header">Repositories</div>`;
+                    repoMatches.forEach(r => {
+                        html += `
+                            <div class="suggestion-item" onclick="openRepoModal(${r.id})">
+                                <span class="material-symbols-rounded" style="color:var(--text-secondary)">book</span>
+                                <div><b>${r.name}</b><br><span>${r.owner}</span></div>
+                            </div>`;
+                    });
+                }
+
+                suggestions.innerHTML = html;
+                suggestions.style.display = 'block';
+            }, 400);
+        });
+
+        // Close suggestions on click outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-container')) suggestions.style.display = 'none';
+        });
+
+
+        /* --- DASHBOARD LOGIC --- */
+        function renderDashboard() {
+            const grid = document.getElementById('dashboard-grid');
+            const filter = document.getElementById('dash-filter').value.toLowerCase();
+            const sort = document.getElementById('dash-sort').value;
+
+            // Filter & Sort
+            let displayRepos = myArchivedRepos.filter(r => r.name.toLowerCase().includes(filter));
+            
+            if (sort === 'name') displayRepos.sort((a,b) => a.name.localeCompare(b.name));
+            if (sort === 'stars') displayRepos.sort((a,b) => b.stars - a.stars);
+            if (sort === 'updated') displayRepos.sort((a,b) => new Date(b.updated) - new Date(a.updated));
+
+            grid.innerHTML = '';
+
+            if (displayRepos.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <span class="material-symbols-rounded">inventory_2</span>
+                        <p>No repositories found. Add some using the search bar!</p>
+                    </div>`;
+                return;
+            }
+
+            displayRepos.forEach(repo => {
+                grid.innerHTML += createCardHTML(repo, true);
+            });
+        }
+
+        function checkUpdates() {
+            const btn = document.getElementById('check-updates-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="material-symbols-rounded" style="animation: spin 1s infinite linear">sync</span> Checking...`;
+
+            // Show progress bars on cards
+            document.querySelectorAll('.progress-container').forEach(el => {
+                el.style.display = 'block';
+                setTimeout(() => { el.querySelector('.progress-bar').style.width = '100%'; }, 100);
+            });
+
+            // Simulate API delay
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-rounded">sync</span> Check Updates`;
+                
+                // Randomly update status
+                myArchivedRepos.forEach(r => {
+                    r.hasUpdate = Math.random() > 0.6;
+                });
+                
+                renderDashboard();
+                showToast('Check complete. 2 updates found.', 'success');
+            }, 2000);
+        }
+
+
+        /* --- EXPLORE LOGIC --- */
+        function openExplore(username) {
+            const user = mockUsers.find(u => u.login === username);
+            if (!user) return;
+
+            // Populate Profile
+            document.getElementById('exp-avatar').src = user.avatar;
+            document.getElementById('exp-name').innerText = user.name;
+            document.getElementById('exp-login').innerText = `@${user.login}`;
+            document.getElementById('exp-bio').innerText = user.bio;
+            document.getElementById('exp-followers').innerText = user.followers.toLocaleString();
+            
+            // Get user repos
+            currentExploreRepos = mockRepos.filter(r => r.owner === username);
+            document.getElementById('exp-repos-count').innerText = currentExploreRepos.length;
+
+            renderExploreGrid();
+            switchView('explore');
+            suggestions.style.display = 'none';
+            searchInput.value = '';
+        }
+
+        function renderExploreGrid() {
+            const grid = document.getElementById('explore-grid');
+            const filter = document.getElementById('exp-filter').value.toLowerCase();
+            
+            const displayRepos = currentExploreRepos.filter(r => r.name.toLowerCase().includes(filter));
+            grid.innerHTML = '';
+            
+            if (displayRepos.length === 0) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><p>No public repositories found.</p></div>`;
+                return;
+            }
+
+            displayRepos.forEach(repo => {
+                // Check if already in archive to adjust button state
+                const isAdded = myArchivedRepos.some(ar => ar.id === repo.id);
+                grid.innerHTML += createCardHTML({ ...repo, isAdded }, false);
+            });
+        }
+
+
+        /* --- CARD TEMPLATE --- */
+        function createCardHTML(repo, isDashboard) {
+            const badgeClass = repo.hasUpdate ? 'active' : '';
+            const langColor = getLangColor(repo.lang);
+            
+            // Dashboard cards open modal, Explore cards have "Add" button? 
+            // Wait, unified plan says: Repo click opens modal. Modal has "Add".
+            
+            return `
+                <div class="card" onclick="openRepoModal(${repo.id})">
+                    <div class="card-header">
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <span class="material-symbols-rounded" style="font-size:32px; color:var(--surface-border)">folder</span>
+                            <div>
+                                <div class="card-title">${repo.owner} / ${repo.name}</div>
+                                <div class="update-badge ${badgeClass}">
+                                    <span class="material-symbols-rounded" style="font-size:12px">download</span> Update Available
+                                </div>
+                            </div>
+                        </div>
+                        ${isDashboard ? `<button class="btn btn-icon" onclick="event.stopPropagation(); deleteRepo(${repo.id})" title="Delete"><span class="material-symbols-rounded">delete</span></button>` : ''}
+                    </div>
+                    
+                    <div class="card-desc">${repo.desc}</div>
+                    
+                    <div class="progress-container"><div class="progress-bar"></div></div>
+
+                    <div class="card-meta">
+                        <div class="meta-item"><div class="lang-dot" style="background:${langColor}"></div> ${repo.lang}</div>
+                        <div class="meta-item"><span class="material-symbols-rounded" style="font-size:16px">star</span> ${repo.stars}</div>
+                        <div class="meta-item" style="margin-left:auto">${repo.updated}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        /* --- REPO MODAL LOGIC --- */
+        function openRepoModal(repoId) {
+            const repo = mockRepos.find(r => r.id === repoId);
+            currentModalRepo = repo;
+            
+            document.getElementById('rm-title').innerText = `${repo.owner} / ${repo.name}`;
+            
+            // Set Button State
+            const btn = document.getElementById('rm-action-btn');
+            const isAdded = myArchivedRepos.some(r => r.id === repo.id);
+            
+            if (isAdded) {
+                btn.innerText = "Added to Archiver";
+                btn.disabled = true;
+                btn.classList.remove('btn-primary');
+            } else {
+                btn.innerHTML = `<span class="material-symbols-rounded">archive</span> Add to Archiver`;
+                btn.disabled = false;
+                btn.classList.add('btn-primary');
+            }
+
+            switchTab('readme'); // Default tab
+            document.getElementById('repo-modal').classList.add('open');
+            suggestions.style.display = 'none';
+        }
+
+        function switchTab(tabName) {
+            // UI Update
+            document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+            Array.from(document.querySelectorAll('.modal-tab')).find(t => t.innerText.toLowerCase().includes(tabName)).classList.add('active');
+
+            const body = document.getElementById('rm-body');
+            
+            if (tabName === 'readme') {
+                body.innerHTML = `
+                    <div class="readme-content">
+                        <h1>README.md</h1>
+                        <p>Welcome to <b>${currentModalRepo.name}</b>. This is a fake readme generated for the demo.</p>
+                        <p>Here is some installation code:</p>
+                        <pre><code>pip install ${currentModalRepo.name}\npython main.py</code></pre>
+                        <p>Features include automated archiving, filtering, and more.</p>
+                    </div>
+                `;
+            } else {
+                body.innerHTML = `
+                    <div class="commit-list">
+                        <div class="commit-item">
+                            <div>
+                                <div class="commit-msg">Fix api rate limiting bug</div>
+                                <div class="commit-meta">Authored by ${currentModalRepo.owner} • 2 hours ago</div>
+                            </div>
+                        </div>
+                        <div class="commit-item">
+                            <div>
+                                <div class="commit-msg">Update dependencies</div>
+                                <div class="commit-meta">Authored by bot • 1 day ago</div>
+                            </div>
+                        </div>
+                        <div class="commit-item">
+                            <div>
+                                <div class="commit-msg">Initial commit</div>
+                                <div class="commit-meta">Authored by ${currentModalRepo.owner} • 1 week ago</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function addCurrentRepo() {
+            if (myArchivedRepos.some(r => r.id === currentModalRepo.id)) return;
+            
+            // Add to state
+            myArchivedRepos.unshift({ ...currentModalRepo, hasUpdate: false, isAdded: true });
+            
+            // Update Button
+            const btn = document.getElementById('rm-action-btn');
+            btn.innerHTML = `<span class="material-symbols-rounded">check</span> Added`;
+            btn.disabled = true;
+            btn.classList.remove('btn-primary');
+
+            // Show Feedback
+            showToast(`Added ${currentModalRepo.name} to Dashboard`, 'success');
+            
+            // Refresh Dashboard if active
+            renderDashboard();
+        }
+
+        function downloadZip() {
+            showToast('Downloading source code...', 'success');
+        }
+        
+        function deleteRepo(id) {
+            myArchivedRepos = myArchivedRepos.filter(r => r.id !== id);
+            renderDashboard();
+            showToast('Repository removed', 'success');
+        }
+
+        /* --- UTILITIES --- */
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('open');
+        }
+
+        function openSettings() {
+            document.getElementById('settings-modal').classList.add('open');
+            document.getElementById('settings-token').value = localStorage.getItem('gh_token') || '';
+        }
+
+        function saveSettings() {
+            const token = document.getElementById('settings-token').value;
+            localStorage.setItem('gh_token', token);
+            closeModal('settings-modal');
+            showToast('Settings saved', 'success');
+        }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            const icon = type === 'success' ? 'check_circle' : 'error';
+            const color = type === 'success' ? 'var(--success-color)' : 'var(--danger-color)';
+            
+            toast.innerHTML = `<span class="material-symbols-rounded" style="color:${color}">${icon}</span> ${msg}`;
+            toast.classList.add('active');
+            setTimeout(() => toast.classList.remove('active'), 3000);
+        }
+
+        function getLangColor(lang) {
+            const map = { 'JavaScript': '#f1e05a', 'Python': '#3572A5', 'Go': '#00ADD8', 'Java': '#b07219' };
+            return map[lang] || '#8b949e';
+        }
+
+    </script>
+</body>
+</html>

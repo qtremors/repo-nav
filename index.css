@@ -940,3 +940,33 @@ input[type=number] {
         width: 100%;
     }
 }
+
+
+/* Legacy Banner Styles */
+#legacy-banner {
+    background-color: #ff9800; /* Orange for visibility */
+    color: #000;
+    text-align: center;
+    padding: 12px;
+    font-family: sans-serif;
+    font-size: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 9999;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+#legacy-banner a {
+    color: #000;
+    font-weight: bold;
+    text-decoration: underline;
+    margin-left: 10px;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+#legacy-banner a:hover {
+    background: rgba(255,255,255,0.6);
+}
